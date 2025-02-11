@@ -108,7 +108,8 @@ function MapComponent() {
   // Fetch parcel details from the API
   const fetchParcelDetails = async (lat: number, lon: number) => {
     try {
-      const url = `https://rigrid-backend.onrender.com/parcels?lat=${lat}&lon=${lon}`;
+      const url =`https://rigrid-backend.onrender.com/regrid/parcels?lat=${lat}&lon=${lon}`;
+
       console.log("Fetching:", url);
       const { data } = await axios.get(url);
       console.log("Parcel Data:", data);
