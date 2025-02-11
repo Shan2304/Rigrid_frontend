@@ -1,34 +1,51 @@
-'use client';
+"use client";
 
-import { useEffect, useState } from 'react';
-import dynamic from 'next/dynamic';
-import { MapContainer, TileLayer, Marker, Popup, useMap, useMapEvents } from 'react-leaflet';
-import L from 'leaflet';
-import 'leaflet/dist/leaflet.css';
-import axios, { AxiosError } from 'axios';
-import ParcelDetails from './ParcelDetails'; // Import ParcelDetails component
+import { useEffect, useState } from "react";
+import dynamic from "next/dynamic";
+import axios, { AxiosError } from "axios";
+import ParcelDetails from "./ParcelDetails";
+import { useMap, useMapEvents } from "react-leaflet";
+import "leaflet/dist/leaflet.css";
 
-// Fix leaflet marker icons
-L.Icon.Default.prototype.options.iconUrl = 'https://unpkg.com/leaflet@1.7.1/dist/images/marker-icon.png';
-L.Icon.Default.prototype.options.shadowUrl = 'https://unpkg.com/leaflet@1.7.1/dist/images/marker-shadow.png';
+// Dynamically import Leaflet components to avoid SSR issues
+const MapContainer = dynamic(
+  () => import("react-leaflet").then((mod) => mod.MapContainer),
+  { ssr: false }
+);
+const TileLayer = dynamic(
+  () => import("react-leaflet").then((mod) => mod.TileLayer),
+  { ssr: false }
+);
+const Marker = dynamic(
+  () => import("react-leaflet").then((mod) => mod.Marker),
+  { ssr: false }
+);
+const Popup = dynamic(
+  () => import("react-leaflet").then((mod) => mod.Popup),
+  { ssr: false }
+);
+
+let L: typeof import("leaflet") | null = null;
 
 // Custom hook to move the map
 const MapFlyTo = ({ position }: { position: [number, number] }) => {
   const map = useMap();
   useEffect(() => {
-    map.flyTo(position, 14);
+    if (map) {
+      map.flyTo(position, 15, { animate: true });
+    }
   }, [position, map]);
   return null;
 };
 
-// Define the types for props
-interface MapClickHandlerProps {
+// Click event handler
+const MapClickHandler = ({
+  setPosition,
+  fetchParcelDetails,
+}: {
   setPosition: React.Dispatch<React.SetStateAction<[number, number]>>;
   fetchParcelDetails: (lat: number, lon: number) => Promise<void>;
-}
-
-// Click event handler
-const MapClickHandler = ({ setPosition, fetchParcelDetails }: MapClickHandlerProps) => {
+}) => {
   useMapEvents({
     click: async (e) => {
       const { lat, lng } = e.latlng;
@@ -41,21 +58,39 @@ const MapClickHandler = ({ setPosition, fetchParcelDetails }: MapClickHandlerPro
   return null;
 };
 
-// Dynamic Import to Prevent SSR Issues
-const MapComponentNoSSR = dynamic(() => Promise.resolve(MapComponent), { ssr: false });
-
 function MapComponent() {
-  const [position, setPosition] = useState<[number, number]>([41.428516, -100.197158]);
-  const [searchInput, setSearchInput] = useState('');
+  // Set initial position to a known urban area (New York City)
+  const [position, setPosition] = useState<[number, number]>([
+    40.7128, -74.006,
+  ]);
+  const [searchInput, setSearchInput] = useState("");
   const [parcelData, setParcelData] = useState(null);
+  const [isMapLoaded, setIsMapLoaded] = useState(false);
 
-  // Function to search by address
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      import("leaflet").then((leaflet) => {
+        L = leaflet;
+        if (L) {
+          L.Icon.Default.prototype.options.iconUrl =
+            "https://unpkg.com/leaflet@1.7.1/dist/images/marker-icon.png";
+          L.Icon.Default.prototype.options.shadowUrl =
+            "https://unpkg.com/leaflet@1.7.1/dist/images/marker-shadow.png";
+        }
+      });
+    }
+  }, []);
+
+  // Search an address and move the map there
   const searchAddress = async () => {
     if (!searchInput.trim()) return;
     try {
-      const { data } = await axios.get(`https://nominatim.openstreetmap.org/search`, {
-        params: { q: searchInput, format: 'json' },
-      });
+      const { data } = await axios.get(
+        `https://nominatim.openstreetmap.org/search`,
+        {
+          params: { q: searchInput, format: "json" },
+        }
+      );
 
       if (data.length > 0) {
         const { lat, lon } = data[0];
@@ -63,39 +98,49 @@ function MapComponent() {
         setPosition([parseFloat(lat), parseFloat(lon)]);
         await fetchParcelDetails(parseFloat(lat), parseFloat(lon));
       } else {
-        alert('Address not found!');
+        alert("Address not found!");
       }
     } catch (error) {
-      console.error('Error fetching address:', error);
+      console.error("Error fetching address:", error);
     }
   };
 
-  // Fetch parcel details
+  // Fetch parcel details from the API
   const fetchParcelDetails = async (lat: number, lon: number) => {
     try {
       const url = `http://localhost:5000/regrid/parcels?lat=${lat}&lon=${lon}`;
-      console.log('Fetching:', url);
+      console.log("Fetching:", url);
       const { data } = await axios.get(url);
-      console.log('Parcel Data:', data);
+      console.log("Parcel Data:", data);
 
-      // Assuming the first parcel data is what we need
       if (Array.isArray(data.parcels) && data.parcels.length > 0) {
-        setParcelData(data.parcels[0]); // Assign the first parcel details
+        setParcelData(data.parcels[0]);
       } else {
-        console.warn('No parcel data available.');
-        setParcelData(null); // No data found
+        console.warn("No parcel data available.");
+        setParcelData(null);
       }
     } catch (error: unknown) {
       if (error instanceof AxiosError) {
-        // Error is an AxiosError, so it's safe to access response
-        console.error('Error fetching parcel details:', error.response?.data || error.message);
+        console.error(
+          "Error fetching parcel details:",
+          error.response?.data || error.message
+        );
       } else {
-        // If it's not an AxiosError, log a generic error message
-        console.error('Error fetching parcel details:', error instanceof Error ? error.message : 'Unknown error');
+        console.error(
+          "Error fetching parcel details:",
+          error instanceof Error ? error.message : "Unknown error"
+        );
       }
-      setParcelData(null); // Reset data if there's an error
+      setParcelData(null);
     }
   };
+
+  // Ensure smooth map loading
+  useEffect(() => {
+    setIsMapLoaded(false);
+    const timer = setTimeout(() => setIsMapLoaded(true), 1000);
+    return () => clearTimeout(timer);
+  }, []);
 
   return (
     <div className="flex flex-col min-h-screen">
@@ -106,35 +151,53 @@ function MapComponent() {
 
       <div className="flex-grow flex justify-center items-center relative">
         {/* Map Display */}
-        <div className="w-full max-w-screen-xl h-[80vh] sm:h-[600px] p-4">
-          <MapContainer center={position} zoom={12} className="w-full h-full">
-            <MapFlyTo position={position} />
-            <MapClickHandler setPosition={setPosition} fetchParcelDetails={fetchParcelDetails} />
-            <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
-            <Marker position={position}>
-              <Popup>
-                <div>
-                  <strong>Latitude:</strong> {position[0]} <br />
-                  <strong>Longitude:</strong> {position[1]} <br />
-                  {parcelData ? (
-                    <ParcelDetails data={parcelData} /> // Pass fetched parcel details to ParcelDetails
-                  ) : (
-                    'Fetching parcel data...'
-                  )}
-                </div>
-              </Popup>
-            </Marker>
-          </MapContainer>
+        <div className="w-full h-[80vh] p-4">
+          {isMapLoaded ? (
+            <MapContainer
+              center={position}
+              zoom={15}
+              className="w-full h-full"
+              scrollWheelZoom={true}
+            >
+              <MapFlyTo position={position} />
+              <MapClickHandler
+                setPosition={setPosition}
+                fetchParcelDetails={fetchParcelDetails}
+              />
+              {/* High-Quality Satellite Map for Structural Clarity */}
+              <TileLayer
+                url="https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"
+                attribution='&copy; <a href="https://www.esri.com/">ESRI</a> Imagery'
+              />
+              <Marker position={position}>
+                <Popup>
+                  <div>
+                    <strong>Latitude:</strong> {position[0]} <br />
+                    <strong>Longitude:</strong> {position[1]} <br />
+                    {parcelData ? (
+                      <ParcelDetails data={parcelData} />
+                    ) : (
+                      <p>No parcel details available.</p>
+                    )}
+                  </div>
+                </Popup>
+              </Marker>
+            </MapContainer>
+          ) : (
+            <div className="flex justify-center items-center h-full">
+              <span>Loading map...</span>
+            </div>
+          )}
         </div>
       </div>
 
-      {/* Search Bar */}
+      {/* Address Search Bar */}
       <div className="flex gap-2 mb-4 justify-center p-4 flex-col sm:flex-row">
         <input
           type="text"
           value={searchInput}
           onChange={(e) => setSearchInput(e.target.value)}
-          placeholder="Search by address or coordinates"
+          placeholder="Search by address"
           className="border p-2 w-full sm:w-2/3 mb-2 sm:mb-0"
         />
         <button
@@ -147,10 +210,10 @@ function MapComponent() {
 
       {/* Footer */}
       <footer className="bg-gray-800 text-white text-center p-4">
-        <p>&copy; 2025 Regrid Parcel Search. All rights reserved.</p>
+        &copy; 2025 Regrid Parcel Search
       </footer>
     </div>
   );
 }
 
-export default MapComponentNoSSR;
+export default MapComponent;
