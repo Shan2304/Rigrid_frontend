@@ -4,11 +4,16 @@ import React from 'react';
 interface ParcelData {
   address: string;
   owner: string;
-  area: number; // Assuming area is a number, change it to string if needed
+  area: number; 
   city?: string;
   state?: string;
-  zipCode?: string;
-  // Add more fields if needed based on the API response
+  zipCode?: number;
+  far?: number;
+  zoning?: string;
+  zoningDescription?: string; 
+  maxBuildingHeightFt?: number; 
+  maxDensityDuPerAcre?: number; 
+  
 }
 
 interface ParcelDetailsProps {
@@ -22,10 +27,16 @@ const ParcelDetails: React.FC<ParcelDetailsProps> = ({ data }) => {
       <p><strong>Address:</strong> {data?.address || 'N/A'}</p>
       <p><strong>Owner:</strong> {data?.owner || 'N/A'}</p>
       <p><strong>Area:</strong> {data?.area || 'N/A'} sqft</p>
-      {data?.city && <p><strong>City:</strong> {data?.city}</p>}
-      {data?.state && <p><strong>State:</strong> {data?.state}</p>}
-      {data?.zipCode && <p><strong>Zip Code:</strong> {data?.zipCode}</p>}
-      {/* Add more fields as necessary */}
+      {data?.city && <p><strong>City:</strong> {data.city}</p>}
+      {data?.state && <p><strong>State:</strong> {data.state}</p>}
+      {data?.zipCode && <p><strong>Zip Code:</strong> {data.zipCode}</p>}
+      <p><strong>FAR:</strong> {data?.far !== undefined ? data.far : 'N/A'}</p>
+      {data?.zoning && <p><strong>Zoning Code:</strong> {data.zoning}</p>}
+      {data?.zoningDescription && <p><strong>Zoning Description:</strong> {data.zoningDescription}</p>}
+      {data?.maxBuildingHeightFt && <p><strong>Max Building Height:</strong> {data.maxBuildingHeightFt} ft</p>}
+      {data?.maxDensityDuPerAcre && <p><strong>Max Density:</strong> {data.maxDensityDuPerAcre} DU/acre</p>}
+      
+      
     </div>
   );
 };
